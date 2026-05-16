@@ -104,6 +104,44 @@ jobs:
               text = text.replace(old, new, 1)
           path.write_text(text)
 
+          path = Path("onnxruntime/core/platform/windows/telemetry.h")
+          text = path.read_text()
+          block = "\n".join
+          replacements = {
+              block(['#include "core/platform/telemetry.h"',
+                     '#include <Windows.h>',
+                     '#include <TraceLoggingProvider.h>',
+                     '#include <mutex>',
+                     '#include "core/platform/windows/TraceLoggingConfig.h"']): block(['#include "core/platform/telemetry.h"',
+                                                                                       '#if __has_include(<TraceLoggingProvider.h>)',
+                                                                                       '#define ORT_HAVE_TRACE_LOGGING_PROVIDER 1',
+                                                                                       '#include <Windows.h>',
+                                                                                       '#include <TraceLoggingProvider.h>',
+                                                                                       '#include <mutex>',
+                                                                                       '#include "core/platform/windows/TraceLoggingConfig.h"',
+                                                                                       '#else',
+                                                                                       '#define ORT_HAVE_TRACE_LOGGING_PROVIDER 0',
+                                                                                       'namespace onnxruntime {',
+                                                                                       'using WindowsTelemetry = Telemetry;',
+                                                                                       '}  // namespace onnxruntime',
+                                                                                       '#endif']),
+              "static constexpr size_t TelemetrySampleCount = 10;": "#if ORT_HAVE_TRACE_LOGGING_PROVIDER\nstatic constexpr size_t TelemetrySampleCount = 10;",
+              "}  // namespace onnxruntime\n": "}  // namespace onnxruntime\n#endif\n",
+          }
+          for old, new in replacements.items():
+              if old not in text:
+                  raise RuntimeError(f"Could not find TraceLogging guard in {path}")
+              text = text.replace(old, new, 1)
+          path.write_text(text)
+
+          path = Path("onnxruntime/core/platform/windows/telemetry.cc")
+          text = path.read_text()
+          old = '#include "core/platform/windows/telemetry.h"'
+          new = '#include "core/platform/windows/telemetry.h"\n#if ORT_HAVE_TRACE_LOGGING_PROVIDER'
+          if old not in text:
+              raise RuntimeError(f"Could not find telemetry include in {path}")
+          path.write_text(text.replace(old, new, 1) + "\n#endif\n")
+
           path = Path("onnxruntime/core/common/spin_pause.cc")
           text = path.read_text()
           old = "#if defined(_WIN32) || defined(__WAITPKG__)"
@@ -114,7 +152,6 @@ jobs:
 
           path = Path("onnxruntime/core/platform/windows/device_discovery.cc")
           text = path.read_text()
-          block = "\n".join
           replacements = {
               block(["#include <initguid.h>",
                      "#include <dxcore.h>",
