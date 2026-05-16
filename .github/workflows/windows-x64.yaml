@@ -21,13 +21,12 @@ env:
 jobs:
   windows_x64:
     if: true
-    name: x64 static CRT ${{ matrix.use_static_crt }} ${{ matrix.build_type }}
+    name: x64 mingw ${{ matrix.build_type }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [windows-2022]
-        use_static_crt: ["ON", "OFF"]
         build_type: ["Debug", "MinSizeRel", "Release", "RelWithDebInfo"]
 
     steps:
@@ -35,8 +34,8 @@ jobs:
         id: cache-build-result
         uses: actions/cache@v4
         with:
-          path: onnxruntime-win-x64-static-crt-${{ matrix.use_static_crt }}-${{ matrix.build_type }}-${{ env.ONNXRUNTIME_VERSION }}
-          key: onnxruntime-win-x64-static-crt-${{ matrix.use_static_crt }}-${{ matrix.build_type }}-${{ env.ONNXRUNTIME_VERSION }}-cache-v1
+          path: onnxruntime-win-x64-mingw-${{ matrix.build_type }}-${{ env.ONNXRUNTIME_VERSION }}
+          key: onnxruntime-win-x64-mingw-${{ matrix.build_type }}-${{ env.ONNXRUNTIME_VERSION }}-cache-v1
 
       - name: Checkout v${{ env.ONNXRUNTIME_VERSION }}
         if: steps.cache-build-result.outputs.cache-hit != 'true'
@@ -46,33 +45,68 @@ jobs:
           submodules: true
           ref: v${{ env.ONNXRUNTIME_VERSION }}
 
+      - name: Set up Zig 0.16
+        if: steps.cache-build-result.outputs.cache-hit != 'true'
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+
       - name: Install dependencies on Windows
         if: steps.cache-build-result.outputs.cache-hit != 'true'
         shell: bash
         run: |
-          python3 -m pip install cmake
+          python3 -m pip install cmake ninja
           cmake --version
-          cmake --help
+          ninja --version
 
       - name: Build onnxruntime ${{ env.ONNXRUNTIME_VERSION }} for Win64
         if: steps.cache-build-result.outputs.cache-hit != 'true'
         shell: bash
         run: |
           build_dir=./build/windows_x64
-          use_static_crt=${{ matrix.use_static_crt }}
-          if [[ $use_static_crt == ON ]]; then
-            extra_opt="--enable_msvc_static_runtime"
-          else
-            extra_opt=""
-          fi
+          target=x86_64-windows-gnu
+
+          cat > "$RUNNER_TEMP/zig-cc.cmd" <<EOF
+          @echo off
+          zig cc -target $target %*
+          EOF
+          cat > "$RUNNER_TEMP/zig-c++.cmd" <<EOF
+          @echo off
+          zig c++ -target $target %*
+          EOF
+          cat > "$RUNNER_TEMP/zig-ar.cmd" <<'EOF'
+          @echo off
+          zig ar %*
+          EOF
+          cat > "$RUNNER_TEMP/zig-ranlib.cmd" <<'EOF'
+          @echo off
+          zig ranlib %*
+          EOF
+          cat > "$RUNNER_TEMP/zig-rc.cmd" <<'EOF'
+          @echo off
+          zig rc %*
+          EOF
+
+          zig_cc=$(cygpath -m "$RUNNER_TEMP/zig-cc.cmd")
+          zig_cxx=$(cygpath -m "$RUNNER_TEMP/zig-c++.cmd")
+          zig_ar=$(cygpath -m "$RUNNER_TEMP/zig-ar.cmd")
+          zig_ranlib=$(cygpath -m "$RUNNER_TEMP/zig-ranlib.cmd")
+          zig_rc=$(cygpath -m "$RUNNER_TEMP/zig-rc.cmd")
+          zig version
 
           python3 ./tools/ci_build/build.py \
             --compile_no_warning_as_error \
             --build_dir $build_dir \
             --config ${{ matrix.build_type }} \
             --parallel \
-            $extra_opt \
-            --cmake_generator "Visual Studio 17 2022" \
+            --cmake_generator "Ninja" \
+            --cmake_extra_defines CMAKE_SYSTEM_NAME=Windows \
+            --cmake_extra_defines CMAKE_SYSTEM_PROCESSOR=x86_64 \
+            --cmake_extra_defines CMAKE_C_COMPILER="$zig_cc" \
+            --cmake_extra_defines CMAKE_CXX_COMPILER="$zig_cxx" \
+            --cmake_extra_defines CMAKE_RC_COMPILER="$zig_rc" \
+            --cmake_extra_defines CMAKE_AR="$zig_ar" \
+            --cmake_extra_defines CMAKE_RANLIB="$zig_ranlib" \
             --skip_tests \
             --build_shared_lib \
             --disable_memleak_checker \
@@ -100,25 +134,21 @@ jobs:
 
           src=tmp/onnxruntime-win-x64-$version
 
-          use_static_crt=${{ matrix.use_static_crt }}
-          if [[ $use_static_crt == ON ]]; then
-            dst_dir=onnxruntime-win-x64-MT-${{ matrix.build_type }}-$version
-          else
-            dst_dir=onnxruntime-win-x64-MD-${{ matrix.build_type }}-$version
-          fi
+          dst_dir=onnxruntime-win-x64-mingw-${{ matrix.build_type }}-$version
 
           mkdir -p $dst_dir
           mkdir -p $dst_dir/lib
 
           echo "copy libs"
 
-          cp -v $build_dir/${{ matrix.build_type }}/${{ matrix.build_type }}/onnxruntime.dll $dst_dir/lib
-          cp -v $build_dir/${{ matrix.build_type }}/${{ matrix.build_type }}/onnxruntime.lib $dst_dir/lib
-          cp -v $build_dir/${{ matrix.build_type }}/${{ matrix.build_type }}/onnxruntime.exp $dst_dir/lib
+          build_output=$build_dir/${{ matrix.build_type }}
+          if [[ -d $build_output/${{ matrix.build_type }} ]]; then
+            build_output=$build_output/${{ matrix.build_type }}
+          fi
 
-          cp -v $build_dir/${{ matrix.build_type }}/${{ matrix.build_type }}/onnxruntime_providers_shared.dll $dst_dir/lib
-          cp -v $build_dir/${{ matrix.build_type }}/${{ matrix.build_type }}/onnxruntime_providers_shared.lib $dst_dir/lib
-          cp -v $build_dir/${{ matrix.build_type }}/${{ matrix.build_type }}/onnxruntime_providers_shared.exp $dst_dir/lib
+          cp -v $build_output/onnxruntime.dll $dst_dir/lib
+          cp -v $build_output/onnxruntime_providers_shared.dll $dst_dir/lib
+          find "$build_output" -maxdepth 1 -type f \( -name "*.a" -o -name "*.lib" -o -name "*.exp" \) -exec cp -v {} $dst_dir/lib/ \;
 
           ls -lh $dst_dir/lib
 
@@ -138,18 +168,11 @@ jobs:
           cp -v $src/VERSION_NUMBER $dst_dir/
 
       - name: Upload artifact
-        if: steps.cache-build-result.outputs.cache-hit != 'true' && matrix.use_static_crt == 'ON'
+        if: steps.cache-build-result.outputs.cache-hit != 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: onnxruntime-win-x64-static-CRT-${{ matrix.use_static_crt }}-${{ matrix.build_type }}-${{ env.ONNXRUNTIME_VERSION }}
-          path: onnxruntime-win-x64-MT-${{ matrix.build_type }}-${{ env.ONNXRUNTIME_VERSION }}
-
-      - name: Upload artifact
-        if: steps.cache-build-result.outputs.cache-hit != 'true' && matrix.use_static_crt == 'OFF'
-        uses: actions/upload-artifact@v4
-        with:
-          name: onnxruntime-win-x64-static-CRT-${{ matrix.use_static_crt }}-${{ matrix.build_type }}-${{ env.ONNXRUNTIME_VERSION }}
-          path: onnxruntime-win-x64-MD-${{ matrix.build_type }}-${{ env.ONNXRUNTIME_VERSION }}
+          name: onnxruntime-win-x64-mingw-${{ matrix.build_type }}-${{ env.ONNXRUNTIME_VERSION }}
+          path: onnxruntime-win-x64-mingw-${{ matrix.build_type }}-${{ env.ONNXRUNTIME_VERSION }}
 
 
       # https://huggingface.co/docs/hub/spaces-github-actions
@@ -166,12 +189,7 @@ jobs:
             rm -rf huggingface
             version=${{ env.ONNXRUNTIME_VERSION }}
 
-            use_static_crt=${{ matrix.use_static_crt }}
-            if [[ $use_static_crt == ON ]]; then
-              dst_dir=onnxruntime-win-x64-MT-${{ matrix.build_type }}-$version
-            else
-              dst_dir=onnxruntime-win-x64-MD-${{ matrix.build_type }}-$version
-            fi
+            dst_dir=onnxruntime-win-x64-mingw-${{ matrix.build_type }}-$version
 
             tar cjvf $dst_dir.tar.bz2 $dst_dir
 

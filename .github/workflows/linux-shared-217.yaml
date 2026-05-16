@@ -47,6 +47,23 @@ jobs:
           submodules: true
           ref: v${{ env.ONNXRUNTIME_VERSION }}
 
+      - name: Set up Zig 0.16
+        if: steps.cache-build-result.outputs.cache-hit != 'true'
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+
+      - name: Expose Zig toolchain to Docker
+        if: steps.cache-build-result.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          zig_bin=$(realpath "$(command -v zig)")
+          zig_root=$(dirname "$zig_bin")
+          rm -rf .zig-toolchain
+          mkdir -p .zig-toolchain
+          cp -a "$zig_root"/. .zig-toolchain/
+          ./.zig-toolchain/zig version
+
       - name: patch
         if: steps.cache-build-result.outputs.cache-hit != 'true'
         shell: bash
@@ -70,9 +87,31 @@ jobs:
             run: |
               echo "config: ${{ matrix.config }}"
               uname -a
-              which gcc
+              export ZIG=/shared/.zig-toolchain/zig
+              "$ZIG" version
 
-              gcc --version
+              cat > /tmp/zig-cc <<'EOF'
+              #!/usr/bin/env bash
+              exec /shared/.zig-toolchain/zig cc "$@"
+              EOF
+              cat > /tmp/zig-c++ <<'EOF'
+              #!/usr/bin/env bash
+              exec /shared/.zig-toolchain/zig c++ "$@"
+              EOF
+              cat > /tmp/zig-ar <<'EOF'
+              #!/usr/bin/env bash
+              exec /shared/.zig-toolchain/zig ar "$@"
+              EOF
+              cat > /tmp/zig-ranlib <<'EOF'
+              #!/usr/bin/env bash
+              exec /shared/.zig-toolchain/zig ranlib "$@"
+              EOF
+              chmod +x /tmp/zig-cc /tmp/zig-c++ /tmp/zig-ar /tmp/zig-ranlib
+
+              export CC=/tmp/zig-cc
+              export CXX=/tmp/zig-c++
+              export AR=/tmp/zig-ar
+              export RANLIB=/tmp/zig-ranlib
 
               echo "update gcc"
 
@@ -90,12 +129,17 @@ jobs:
               ls -lh /opt/rh/devtoolset-11
 
               source /opt/rh/devtoolset-11/enable
+              export CC=/tmp/zig-cc
+              export CXX=/tmp/zig-c++
+              export AR=/tmp/zig-ar
+              export RANLIB=/tmp/zig-ranlib
 
               echo 'which gcc'
-              which gcc
+              which "$CC"
 
               echo 'gcc --version'
-              gcc --version
+              "$CC" --version
+              "$CXX" --version
               ldd --version
 
               which python
@@ -125,6 +169,10 @@ jobs:
 
               python3 tools/ci_build/build.py \
                 --cmake_extra_defines onnxruntime_BUILD_UNIT_TESTS=OFF \
+                --cmake_extra_defines CMAKE_C_COMPILER=/tmp/zig-cc \
+                --cmake_extra_defines CMAKE_CXX_COMPILER=/tmp/zig-c++ \
+                --cmake_extra_defines CMAKE_AR=/tmp/zig-ar \
+                --cmake_extra_defines CMAKE_RANLIB=/tmp/zig-ranlib \
                 --build_dir $build_dir \
                 --cmake_generator 'Ninja' \
                 --config ${{ matrix.config }} \
@@ -174,6 +222,9 @@ jobs:
             -t "$(git rev-parse HEAD)"
 
           mv $build_dir/$artifact ./
+          if [[ -d "$build_dir/$config" ]]; then
+            find "$build_dir/$config" -maxdepth 1 -type f -name "*.a" -exec cp -v {} ./$artifact/lib/ \;
+          fi
           tree ./$artifact
 
           ldd ./$artifact/lib/libonnxruntime.so

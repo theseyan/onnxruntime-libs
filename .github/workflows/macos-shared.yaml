@@ -30,8 +30,6 @@ jobs:
           - os: macos-latest
             arch: arm64
           - os: macos-15-intel
-            arch: universal2
-          - os: macos-15-intel
             arch: x86_64
 
     steps:
@@ -55,6 +53,12 @@ jobs:
           submodules: true
           ref: v${{ env.ONNXRUNTIME_VERSION }}
 
+      - name: Set up Zig 0.16
+        if: steps.cache-build-result.outputs.cache-hit != 'true'
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+
       - name: Install dependencies on macos
         if: steps.cache-build-result.outputs.cache-hit != 'true'
         shell: bash
@@ -68,19 +72,31 @@ jobs:
         if: steps.cache-build-result.outputs.cache-hit != 'true'
         shell: bash
         run: |
-          export CMAKE_CXX_COMPILER_LAUNCHER=ccache
-          export PATH="/usr/lib/ccache:/usr/local/opt/ccache/libexec:$PATH"
           cmake --version
+          zig version
+
+          cat > "$RUNNER_TEMP/zig-cc" <<'EOF'
+          #!/usr/bin/env bash
+          exec zig cc "$@"
+          EOF
+          cat > "$RUNNER_TEMP/zig-c++" <<'EOF'
+          #!/usr/bin/env bash
+          exec zig c++ "$@"
+          EOF
+          cat > "$RUNNER_TEMP/zig-ar" <<'EOF'
+          #!/usr/bin/env bash
+          exec zig ar "$@"
+          EOF
+          cat > "$RUNNER_TEMP/zig-ranlib" <<'EOF'
+          #!/usr/bin/env bash
+          exec zig ranlib "$@"
+          EOF
+          chmod +x "$RUNNER_TEMP/zig-cc" "$RUNNER_TEMP/zig-c++" "$RUNNER_TEMP/zig-ar" "$RUNNER_TEMP/zig-ranlib"
 
           extra_opt=""
 
           build_dir=./build-macos/${{ matrix.arch }}
           arch=${{ matrix.arch }}
-          if [[ $arch == universal2 ]]; then
-            arch="x86_64;arm64"
-            extra_opt="--no_kleidiai"
-            # sed -i.bak s/\"arm64e\",/\"x86_64\;arm64\",/g ./tools/ci_build/build.py
-          fi
 
           sed -i.bak '/SOVERSION/d' ./cmake/onnxruntime.cmake
 
@@ -92,10 +108,13 @@ jobs:
             --cmake_generator 'Ninja' \
             --update \
             --build \
-            --use_xcode \
             --build_shared_lib \
             --compile_no_warning_as_error \
             --cmake_extra_defines onnxruntime_BUILD_UNIT_TESTS=OFF \
+            --cmake_extra_defines CMAKE_C_COMPILER="$RUNNER_TEMP/zig-cc" \
+            --cmake_extra_defines CMAKE_CXX_COMPILER="$RUNNER_TEMP/zig-c++" \
+            --cmake_extra_defines CMAKE_AR="$RUNNER_TEMP/zig-ar" \
+            --cmake_extra_defines CMAKE_RANLIB="$RUNNER_TEMP/zig-ranlib" \
             --cmake_extra_defines CMAKE_INSTALL_PREFIX=$build_dir/install/ \
             --cmake_extra_defines CMAKE_OSX_ARCHITECTURES="$arch" \
             --cmake_extra_defines CMAKE_POLICY_VERSION_MINIMUM=3.5 \
@@ -145,6 +164,9 @@ jobs:
 
             mkdir -p $ARTIFACT_NAME/lib
             cp -v install/lib/libonnxruntime.*.dylib $ARTIFACT_NAME/lib
+            if [[ -d Release ]]; then
+              find Release -maxdepth 1 -type f -name "*.a" -exec cp -v {} $ARTIFACT_NAME/lib/ \;
+            fi
 
             pushd $ARTIFACT_NAME/lib
             name=$(ls libonnxruntime.*.dylib)
