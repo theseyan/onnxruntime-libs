@@ -230,35 +230,6 @@ jobs:
           overwrite: true
           tag: v${{ env.ONNXRUNTIME_VERSION }}
 
-      # https://huggingface.co/docs/hub/spaces-github-actions
-      - name: Publish to huggingface
-        if: github.repository_owner == 'csukuangfj' && steps.cache-build-result.outputs.cache-hit != 'true'
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        shell: bash
-        run: |
-          ls -lh
-          version=${{ env.ONNXRUNTIME_VERSION }}
-
-          tree ./onnxruntime-linux-arm-$version/
-
-          git config --global user.email "csukuangfj@gmail.com"
-          git config --global user.name "Fangjun Kuang"
-
-          export GIT_CLONE_PROTECTION_ACTIVE=false
-          GIT_LFS_SKIP_SMUDGE=1 git clone https://csukuangfj2:$HF_TOKEN@huggingface.co/csukuangfj2/onnxruntime-libs huggingface
-
-          cd huggingface
-          # git lfs pull
-          cp -v ../onnxruntime-linux-arm-*.zip ./
-          git status
-          git lfs track "*.zip"
-
-          git add .
-
-          git commit -m "upload onnxruntime-linux-arm-${{ env.ONNXRUNTIME_VERSION }}.zip"
-          git push https://csukuangfj2:$HF_TOKEN@huggingface.co/csukuangfj2/onnxruntime-libs main
-
       - name: Upload artifact
         if: steps.cache-build-result.outputs.cache-hit != 'true'
         uses: actions/upload-artifact@v4
