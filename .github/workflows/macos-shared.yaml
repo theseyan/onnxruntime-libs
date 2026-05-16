@@ -123,6 +123,7 @@ jobs:
             --parallel \
             --skip_tests \
             --apple_deploy_target '10.15' \
+            --no_kleidiai \
             $extra_opt \
             --use_coreml
             # see  https://github.com/microsoft/onnxruntime/pull/24194/files
@@ -170,7 +171,6 @@ jobs:
 
             pushd $ARTIFACT_NAME/lib
             name=$(ls libonnxruntime.*.dylib)
-            strip -S $name
             ln -s $name libonnxruntime.dylib
 
             popd

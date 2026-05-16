@@ -88,15 +88,16 @@ jobs:
               echo "config: ${{ matrix.config }}"
               uname -a
               export ZIG=/shared/.zig-toolchain/zig
+              export ZIG_TARGET=x86_64-linux-gnu.2.17
               "$ZIG" version
 
               cat > /tmp/zig-cc <<'EOF'
               #!/usr/bin/env bash
-              exec /shared/.zig-toolchain/zig cc "$@"
+              exec /shared/.zig-toolchain/zig cc -target "${ZIG_TARGET:?}" "$@"
               EOF
               cat > /tmp/zig-c++ <<'EOF'
               #!/usr/bin/env bash
-              exec /shared/.zig-toolchain/zig c++ "$@"
+              exec /shared/.zig-toolchain/zig c++ -target "${ZIG_TARGET:?}" "$@"
               EOF
               cat > /tmp/zig-ar <<'EOF'
               #!/usr/bin/env bash

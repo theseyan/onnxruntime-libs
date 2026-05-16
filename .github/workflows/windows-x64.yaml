@@ -98,7 +98,6 @@ jobs:
             --compile_no_warning_as_error \
             --build_dir $build_dir \
             --config ${{ matrix.build_type }} \
-            --parallel \
             --cmake_generator "Ninja" \
             --cmake_extra_defines CMAKE_SYSTEM_NAME=Windows \
             --cmake_extra_defines CMAKE_SYSTEM_PROCESSOR=x86_64 \
@@ -107,6 +106,8 @@ jobs:
             --cmake_extra_defines CMAKE_RC_COMPILER="$zig_rc" \
             --cmake_extra_defines CMAKE_AR="$zig_ar" \
             --cmake_extra_defines CMAKE_RANLIB="$zig_ranlib" \
+            --cmake_extra_defines CMAKE_C_FLAGS="" \
+            --cmake_extra_defines CMAKE_CXX_FLAGS="" \
             --skip_tests \
             --build_shared_lib \
             --disable_memleak_checker \
