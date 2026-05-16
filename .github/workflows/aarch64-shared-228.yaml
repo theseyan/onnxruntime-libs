@@ -73,16 +73,31 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
-          path = Path("cmake/CMakeLists.txt")
-          text = path.read_text()
           replacements = {
               "check_cxx_compiler_flag(-march=armv8.2-a+bf16 HAS_ARM64_BFLOAT16)": "check_cxx_compiler_flag(-mcpu=baseline+bf16 HAS_ARM64_BFLOAT16)",
               "check_cxx_compiler_flag(-march=armv8.2-a+fp16 HAS_ARM64_FLOAT16)": "check_cxx_compiler_flag(-mcpu=baseline+fullfp16 HAS_ARM64_FLOAT16)",
           }
+          path = Path("cmake/CMakeLists.txt")
+          text = path.read_text()
           for old, new in replacements.items():
               if old not in text:
                   raise RuntimeError(f"Could not find expected compiler probe: {old}")
               text = text.replace(old, new, 1)
+          path.write_text(text)
+
+          replacements = {
+              "-march=armv8.2-a+dotprod": "-mcpu=baseline+dotprod",
+              "-march=armv8.2-a+i8mm": "-mcpu=baseline+i8mm",
+              "-march=armv8.2-a+bf16": "-mcpu=baseline+bf16",
+              "-march=armv8.2-a+fp16": "-mcpu=baseline+fullfp16",
+              "-march=armv8.2-a+sve+fp16": "-mcpu=baseline+sve+fullfp16",
+          }
+          path = Path("cmake/onnxruntime_mlas.cmake")
+          text = path.read_text()
+          for old, new in replacements.items():
+              if old not in text:
+                  raise RuntimeError(f"Could not find expected MLAS compiler flag: {old}")
+              text = text.replace(old, new)
           path.write_text(text)
           PY
 
