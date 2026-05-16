@@ -126,13 +126,12 @@ jobs:
                                                                                        '}  // namespace onnxruntime',
                                                                                        '#endif']),
               "static constexpr size_t TelemetrySampleCount = 10;": "#if ORT_HAVE_TRACE_LOGGING_PROVIDER\nstatic constexpr size_t TelemetrySampleCount = 10;",
-              "}  // namespace onnxruntime\n": "}  // namespace onnxruntime\n#endif\n",
           }
           for old, new in replacements.items():
               if old not in text:
                   raise RuntimeError(f"Could not find TraceLogging guard in {path}")
               text = text.replace(old, new, 1)
-          path.write_text(text)
+          path.write_text(text.rstrip() + "\n#endif\n")
 
           path = Path("onnxruntime/core/platform/windows/telemetry.cc")
           text = path.read_text()
