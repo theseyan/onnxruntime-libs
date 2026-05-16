@@ -152,8 +152,8 @@ jobs:
             --cmake_extra_defines CMAKE_RC_COMPILER="$zig_rc" \
             --cmake_extra_defines CMAKE_AR="$zig_ar" \
             --cmake_extra_defines CMAKE_RANLIB="$zig_ranlib" \
-            --cmake_extra_defines CMAKE_C_FLAGS="" \
-            --cmake_extra_defines CMAKE_CXX_FLAGS="" \
+            --cmake_extra_defines CMAKE_C_FLAGS="-DNOGDI" \
+            --cmake_extra_defines CMAKE_CXX_FLAGS="-DNOGDI" \
             --skip_tests \
             --build_shared_lib \
             --disable_memleak_checker \
