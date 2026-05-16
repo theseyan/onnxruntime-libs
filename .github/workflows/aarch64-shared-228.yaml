@@ -86,11 +86,18 @@ jobs:
           path.write_text(text)
 
           replacements = {
-              "-march=armv8.2-a+dotprod": "-mcpu=baseline+dotprod",
-              "-march=armv8.2-a+i8mm": "-mcpu=baseline+i8mm",
-              "-march=armv8.2-a+bf16": "-mcpu=baseline+bf16",
-              "-march=armv8.2-a+fp16": "-mcpu=baseline+fullfp16",
-              "-march=armv8.2-a+sve+fp16": "-mcpu=baseline+sve+fullfp16",
+              '${MLAS_SRC_DIR}/aarch64/HalfGemmKernelNeon.S PROPERTIES COMPILE_FLAGS " -march=armv8.2-a+fp16 "': '${MLAS_SRC_DIR}/aarch64/HalfGemmKernelNeon.S PROPERTIES COMPILE_FLAGS " -Wa,-march=armv8.2-a+fp16 "',
+              '${MLAS_SRC_DIR}/aarch64/QgemmS8S8KernelSmmla.S PROPERTIES COMPILE_FLAGS " -march=armv8.2-a+i8mm "': '${MLAS_SRC_DIR}/aarch64/QgemmS8S8KernelSmmla.S PROPERTIES COMPILE_FLAGS " -Wa,-march=armv8.2-a+i8mm "',
+              '${MLAS_SRC_DIR}/aarch64/QgemmU8X8KernelUmmla.S PROPERTIES COMPILE_FLAGS " -march=armv8.2-a+i8mm "': '${MLAS_SRC_DIR}/aarch64/QgemmU8X8KernelUmmla.S PROPERTIES COMPILE_FLAGS " -Wa,-march=armv8.2-a+i8mm "',
+              '${MLAS_SRC_DIR}/aarch64/SbgemmKernelNeon.S PROPERTIES COMPILE_FLAGS " -march=armv8.2-a+bf16 "': '${MLAS_SRC_DIR}/aarch64/SbgemmKernelNeon.S PROPERTIES COMPILE_FLAGS " -Wa,-march=armv8.2-a+bf16 "',
+              '${MLAS_SRC_DIR}/aarch64/SconvDepthwiseKernelNeonBf16.S PROPERTIES COMPILE_FLAGS " -march=armv8.2-a+bf16 "': '${MLAS_SRC_DIR}/aarch64/SconvDepthwiseKernelNeonBf16.S PROPERTIES COMPILE_FLAGS " -Wa,-march=armv8.2-a+bf16 "',
+              '${MLAS_SRC_DIR}/aarch64/SconvKernelNeonBf16.S PROPERTIES COMPILE_FLAGS " -march=armv8.2-a+bf16 "': '${MLAS_SRC_DIR}/aarch64/SconvKernelNeonBf16.S PROPERTIES COMPILE_FLAGS " -Wa,-march=armv8.2-a+bf16 "',
+              '${MLAS_SRC_DIR}/aarch64/SconvPointwiseKernelNeonBf16.S PROPERTIES COMPILE_FLAGS " -march=armv8.2-a+bf16 "': '${MLAS_SRC_DIR}/aarch64/SconvPointwiseKernelNeonBf16.S PROPERTIES COMPILE_FLAGS " -Wa,-march=armv8.2-a+bf16 "',
+              'COMPILE_FLAGS " -march=armv8.2-a+dotprod"': 'COMPILE_FLAGS " -mcpu=baseline+dotprod"',
+              'COMPILE_FLAGS " -march=armv8.2-a+i8mm "': 'COMPILE_FLAGS " -mcpu=baseline+i8mm "',
+              'COMPILE_FLAGS " -march=armv8.2-a+bf16 "': 'COMPILE_FLAGS " -mcpu=baseline+bf16 "',
+              'COMPILE_FLAGS " -march=armv8.2-a+fp16 "': 'COMPILE_FLAGS " -mcpu=baseline+fullfp16 "',
+              'COMPILE_FLAGS " -march=armv8.2-a+sve+fp16 "': 'COMPILE_FLAGS " -mcpu=baseline+sve+fullfp16 "',
           }
           path = Path("cmake/onnxruntime_mlas.cmake")
           text = path.read_text()
