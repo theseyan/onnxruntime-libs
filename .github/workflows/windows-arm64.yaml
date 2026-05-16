@@ -73,6 +73,14 @@ jobs:
           if old not in text:
               raise RuntimeError(f"Could not find ORT warning flag block in {path}")
           path.write_text(text.replace(old, new, 1))
+
+          path = Path("include/onnxruntime/core/common/status.h")
+          text = path.read_text()
+          old = "#include <winerror.h>"
+          new = "#include <windows.h>"
+          if old not in text:
+              raise RuntimeError(f"Could not find Windows error include in {path}")
+          path.write_text(text.replace(old, new, 1))
           PY
 
       - name: Build onnxruntime ${{ env.ONNXRUNTIME_VERSION }} for arm64
