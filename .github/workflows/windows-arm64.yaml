@@ -103,6 +103,57 @@ jobs:
                   raise RuntimeError(f"Could not find ETW guard in {path}")
               text = text.replace(old, new, 1)
           path.write_text(text)
+
+          path = Path("onnxruntime/core/common/spin_pause.cc")
+          text = path.read_text()
+          old = "#if defined(_WIN32) || defined(__WAITPKG__)"
+          new = "#if defined(_MSC_VER) || defined(__WAITPKG__)"
+          if old not in text:
+              raise RuntimeError(f"Could not find TPAUSE guard in {path}")
+          path.write_text(text.replace(old, new, 1))
+
+          path = Path("onnxruntime/core/platform/windows/device_discovery.cc")
+          text = path.read_text()
+          block = "\n".join
+          replacements = {
+              block(["#include <initguid.h>",
+                     "#include <dxcore.h>",
+                     "#include <dxcore_interface.h>",
+                     "#include <wil/com.h>"]): block(["#if __has_include(<dxcore.h>) && __has_include(<dxcore_interface.h>)",
+                                                      "#define ORT_HAVE_DXCORE 1",
+                                                      "#include <initguid.h>",
+                                                      "#include <dxcore.h>",
+                                                      "#include <dxcore_interface.h>",
+                                                      "#include <wil/com.h>",
+                                                      "#else",
+                                                      "#define ORT_HAVE_DXCORE 0",
+                                                      "#endif"]),
+              block(["typedef HRESULT(WINAPI* PFN_DXCoreCreateAdapterFactory)(REFIID riid, void** ppvFactory);",
+                     "",
+                     "// returns LUID to DeviceInfo",
+                     "std::unordered_map<uint64_t, DeviceInfo> GetDeviceInfoDxcore() {"]): block(["#if ORT_HAVE_DXCORE",
+                                                                                                  "typedef HRESULT(WINAPI* PFN_DXCoreCreateAdapterFactory)(REFIID riid, void** ppvFactory);",
+                                                                                                  "",
+                                                                                                  "// returns LUID to DeviceInfo",
+                                                                                                  "std::unordered_map<uint64_t, DeviceInfo> GetDeviceInfoDxcore() {"]),
+              block(["  return device_info;",
+                     "}",
+                     "",
+                     "DeviceInfo GetDeviceInfoCPUID() {"]): block(["  return device_info;",
+                                                                    "}",
+                                                                    "#else",
+                                                                    "std::unordered_map<uint64_t, DeviceInfo> GetDeviceInfoDxcore() {",
+                                                                    "  return {};",
+                                                                    "}",
+                                                                    "#endif",
+                                                                    "",
+                                                                    "DeviceInfo GetDeviceInfoCPUID() {"]),
+          }
+          for old, new in replacements.items():
+              if old not in text:
+                  raise RuntimeError(f"Could not find DXCore block in {path}")
+              text = text.replace(old, new, 1)
+          path.write_text(text)
           PY
 
       - name: Build onnxruntime ${{ env.ONNXRUNTIME_VERSION }} for arm64
