@@ -59,6 +59,22 @@ jobs:
           cmake --version
           ninja --version
 
+      - name: Patch ONNX Runtime for MinGW
+        if: steps.cache-build-result.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("cmake/CMakeLists.txt")
+          text = path.read_text()
+          old = "set(ORT_WARNING_FLAGS)\nif (WIN32)"
+          new = "set(ORT_WARNING_FLAGS)\nif (MSVC)"
+          if old not in text:
+              raise RuntimeError(f"Could not find ORT warning flag block in {path}")
+          path.write_text(text.replace(old, new, 1))
+          PY
+
       - name: Build onnxruntime ${{ env.ONNXRUNTIME_VERSION }} for Win64
         if: steps.cache-build-result.outputs.cache-hit != 'true'
         shell: bash

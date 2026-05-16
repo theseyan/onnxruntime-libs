@@ -152,6 +152,11 @@ jobs:
                 --cmake_extra_defines CMAKE_CXX_COMPILER=/tmp/zig-c++ \
                 --cmake_extra_defines CMAKE_AR=/tmp/zig-ar \
                 --cmake_extra_defines CMAKE_RANLIB=/tmp/zig-ranlib \
+                --cmake_extra_defines CMAKE_C_COMPILER_AR=/tmp/zig-ar \
+                --cmake_extra_defines CMAKE_CXX_COMPILER_AR=/tmp/zig-ar \
+                --cmake_extra_defines CMAKE_C_COMPILER_RANLIB=/tmp/zig-ranlib \
+                --cmake_extra_defines CMAKE_CXX_COMPILER_RANLIB=/tmp/zig-ranlib \
+                --cmake_extra_defines CMAKE_DISABLE_FIND_PACKAGE_ZLIB=ON \
                 --build_dir $build_dir \
                 --cmake_generator 'Ninja' \
                 --config ${{ matrix.config }} \

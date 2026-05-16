@@ -53,12 +53,6 @@ jobs:
           submodules: true
           ref: v${{ env.ONNXRUNTIME_VERSION }}
 
-      - name: Set up Zig 0.16
-        if: steps.cache-build-result.outputs.cache-hit != 'true'
-        uses: mlugg/setup-zig@v2
-        with:
-          version: 0.16.0
-
       - name: Install dependencies on macos
         if: steps.cache-build-result.outputs.cache-hit != 'true'
         shell: bash
@@ -73,25 +67,6 @@ jobs:
         shell: bash
         run: |
           cmake --version
-          zig version
-
-          cat > "$RUNNER_TEMP/zig-cc" <<'EOF'
-          #!/usr/bin/env bash
-          exec zig cc "$@"
-          EOF
-          cat > "$RUNNER_TEMP/zig-c++" <<'EOF'
-          #!/usr/bin/env bash
-          exec zig c++ "$@"
-          EOF
-          cat > "$RUNNER_TEMP/zig-ar" <<'EOF'
-          #!/usr/bin/env bash
-          exec zig ar "$@"
-          EOF
-          cat > "$RUNNER_TEMP/zig-ranlib" <<'EOF'
-          #!/usr/bin/env bash
-          exec zig ranlib "$@"
-          EOF
-          chmod +x "$RUNNER_TEMP/zig-cc" "$RUNNER_TEMP/zig-c++" "$RUNNER_TEMP/zig-ar" "$RUNNER_TEMP/zig-ranlib"
 
           extra_opt=""
 
@@ -108,13 +83,10 @@ jobs:
             --cmake_generator 'Ninja' \
             --update \
             --build \
+            --use_xcode \
             --build_shared_lib \
             --compile_no_warning_as_error \
             --cmake_extra_defines onnxruntime_BUILD_UNIT_TESTS=OFF \
-            --cmake_extra_defines CMAKE_C_COMPILER="$RUNNER_TEMP/zig-cc" \
-            --cmake_extra_defines CMAKE_CXX_COMPILER="$RUNNER_TEMP/zig-c++" \
-            --cmake_extra_defines CMAKE_AR="$RUNNER_TEMP/zig-ar" \
-            --cmake_extra_defines CMAKE_RANLIB="$RUNNER_TEMP/zig-ranlib" \
             --cmake_extra_defines CMAKE_INSTALL_PREFIX=$build_dir/install/ \
             --cmake_extra_defines CMAKE_OSX_ARCHITECTURES="$arch" \
             --cmake_extra_defines CMAKE_POLICY_VERSION_MINIMUM=3.5 \
@@ -123,11 +95,8 @@ jobs:
             --parallel \
             --skip_tests \
             --apple_deploy_target '10.15' \
-            --no_kleidiai \
             $extra_opt \
             --use_coreml
-            # see  https://github.com/microsoft/onnxruntime/pull/24194/files
-            # for why to use --no_kleidiai
 
       - name: Collect results
         if: steps.cache-build-result.outputs.cache-hit != 'true'
