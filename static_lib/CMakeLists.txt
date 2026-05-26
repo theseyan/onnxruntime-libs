@@ -1,0 +1,97 @@
+if(CMAKE_VERSION VERSION_GREATER_EQUAL "4.0.0")
+  set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
+endif()
+cmake_minimum_required(VERSION 3.28)
+
+set(CMAKE_OSX_DEPLOYMENT_TARGET "13.4" CACHE STRING "Minimum OS X deployment version. Used only for macOS")
+project(onnxruntime_static_lib)
+
+set(onnxruntime_BUILD_SHARED_LIB OFF)
+add_definitions(-D_SILENCE_ALL_CXX23_DEPRECATION_WARNINGS)
+
+add_subdirectory(${ONNXRUNTIME_SOURCE_DIR}/cmake onnxruntime EXCLUDE_FROM_ALL)
+
+if(APPLE AND CMAKE_OSX_ARCHITECTURES)
+  list(LENGTH CMAKE_OSX_ARCHITECTURES ARCH_COUNT)
+  if(ARCH_COUNT GREATER 1)
+    if("arm64" IN_LIST CMAKE_OSX_ARCHITECTURES AND TARGET onnxruntime_mlas_arm64)
+      install(TARGETS onnxruntime_mlas_arm64 EXPORT onnxruntimeTargets
+              ARCHIVE DESTINATION lib
+              LIBRARY DESTINATION lib
+              RUNTIME DESTINATION bin
+              FRAMEWORK DESTINATION bin)
+    endif()
+    if("x86_64" IN_LIST CMAKE_OSX_ARCHITECTURES AND TARGET onnxruntime_mlas_x86_64)
+      install(TARGETS onnxruntime_mlas_x86_64 EXPORT onnxruntimeTargets
+              ARCHIVE DESTINATION lib
+              LIBRARY DESTINATION lib
+              RUNTIME DESTINATION bin
+              FRAMEWORK DESTINATION bin)
+    endif()
+  endif()
+endif()
+
+include(bundle_static_library.cmake)
+
+set(extra_static_libs)
+if(APPLE AND "arm64" IN_LIST CMAKE_OSX_ARCHITECTURES AND "x86_64" IN_LIST CMAKE_OSX_ARCHITECTURES)
+  set(extra_static_libs onnxruntime_mlas_arm64 onnxruntime_mlas_x86_64)
+endif()
+
+bundle_static_library(${PROJECT_NAME}
+  ${extra_static_libs}
+  onnxruntime_session
+  onnxruntime_optimizer
+  onnxruntime_providers
+  onnxruntime_util
+  onnxruntime_framework
+  onnxruntime_graph
+  onnxruntime_mlas
+  onnxruntime_common
+  onnxruntime_flatbuffers
+  onnx_test_data_proto
+  onnx
+  onnx_proto
+  libprotobuf-lite
+  re2
+  absl_base
+  absl_throw_delegate
+  absl_raw_hash_set
+  absl_hash
+  absl_city
+  absl_low_level_hash
+  cpuinfo
+)
+
+set(FILES_TO_INSTALL
+  ${ONNXRUNTIME_SOURCE_DIR}/include/onnxruntime/core/session/onnxruntime_float16.h
+  ${ONNXRUNTIME_SOURCE_DIR}/include/onnxruntime/core/session/onnxruntime_c_api.h
+  ${ONNXRUNTIME_SOURCE_DIR}/include/onnxruntime/core/session/onnxruntime_ep_c_api.h
+  ${ONNXRUNTIME_SOURCE_DIR}/include/onnxruntime/core/session/onnxruntime_ep_device_ep_metadata_keys.h
+  ${ONNXRUNTIME_SOURCE_DIR}/include/onnxruntime/core/session/onnxruntime_lite_custom_op.h
+  ${ONNXRUNTIME_SOURCE_DIR}/include/onnxruntime/core/session/onnxruntime_cxx_api.h
+  ${ONNXRUNTIME_SOURCE_DIR}/include/onnxruntime/core/session/onnxruntime_cxx_inline.h
+  ${ONNXRUNTIME_SOURCE_DIR}/include/onnxruntime/core/providers/cpu/cpu_provider_factory.h
+  ${ONNXRUNTIME_SOURCE_DIR}/include/onnxruntime/core/session/onnxruntime_run_options_config_keys.h
+  ${ONNXRUNTIME_SOURCE_DIR}/include/onnxruntime/core/session/onnxruntime_session_options_config_keys.h
+  ${ONNXRUNTIME_SOURCE_DIR}/include/onnxruntime/core/framework/provider_options.h
+)
+
+foreach(FILE_PATH IN LISTS FILES_TO_INSTALL)
+  if(EXISTS "${FILE_PATH}")
+    install(FILES ${FILE_PATH} TYPE INCLUDE)
+  endif()
+endforeach()
+
+if(APPLE)
+  install(
+    FILES ${ONNXRUNTIME_SOURCE_DIR}/include/onnxruntime/core/providers/coreml/coreml_provider_factory.h
+    TYPE INCLUDE
+  )
+endif()
+
+install(
+  FILES ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}${PROJECT_NAME}${CMAKE_STATIC_LIBRARY_SUFFIX}
+  RENAME ${CMAKE_STATIC_LIBRARY_PREFIX}onnxruntime${CMAKE_STATIC_LIBRARY_SUFFIX}
+  TYPE LIB
+)

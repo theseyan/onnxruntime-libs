@@ -1,0 +1,149 @@
+name: macos-static
+
+on:
+  push:
+    branches:
+      - test-v1.23.2-2
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version information (e.g., 1.23.2)"
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  ONNXRUNTIME_VERSION:
+    |- # Enter release tag name or version name in workflow_dispatch. Appropriate version if not specified
+    ${{ github.event.release.tag_name || github.event.inputs.version || '1.23.2' }}
+
+jobs:
+  macos-static:
+    name: ${{ matrix.arch }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            arch: arm64
+            protoc_platform: osx-aarch_64
+          - os: macos-15-intel
+            arch: x86_64
+            protoc_platform: osx-x86_64
+
+    steps:
+      - name: Cache build result for ${{ env.ONNXRUNTIME_VERSION }}
+        id: cache-build-result
+        uses: actions/cache@v4
+        with:
+          path: onnxruntime-osx-${{ matrix.arch }}-static-${{ env.ONNXRUNTIME_VERSION }}
+          key: onnxruntime-osx-${{ matrix.arch }}-static-${{ env.ONNXRUNTIME_VERSION }}-cache-v1
+
+      - name: Checkout build scripts
+        if: steps.cache-build-result.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+
+      - name: Checkout ONNX Runtime v${{ env.ONNXRUNTIME_VERSION }}
+        if: steps.cache-build-result.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/onnxruntime
+          submodules: true
+          ref: v${{ env.ONNXRUNTIME_VERSION }}
+          path: onnxruntime
+
+      - name: ccache
+        if: steps.cache-build-result.outputs.cache-hit != 'true'
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ matrix.os }}-${{ matrix.arch }}-static
+
+      - name: Download protoc
+        if: steps.cache-build-result.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          if [[ ${{ env.ONNXRUNTIME_VERSION }} =~ 1.14.[0-9] ]]; then
+            protoc_version=3.20.3
+          elif [[ ${{ env.ONNXRUNTIME_VERSION }} =~ 1.1[56789].[0-9] || ${{ env.ONNXRUNTIME_VERSION }} =~ 1.2[0-9].[0-9] ]]; then
+            protoc_version=21.12
+          else
+            echo "Unsupported version ${{ env.ONNXRUNTIME_VERSION }}"
+            exit 1
+          fi
+          curl -L -o protoc.zip "https://github.com/protocolbuffers/protobuf/releases/download/v${protoc_version}/protoc-${protoc_version}-${{ matrix.protoc_platform }}.zip"
+          unzip -q protoc.zip
+          rm -f protoc.zip
+          ./bin/protoc --version
+          echo "$GITHUB_WORKSPACE/bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        if: steps.cache-build-result.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          brew install ninja
+          cmake --version
+
+      - name: Build static onnxruntime ${{ env.ONNXRUNTIME_VERSION }}
+        if: steps.cache-build-result.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          export CMAKE_CXX_COMPILER_LAUNCHER=ccache
+          export PATH="/usr/lib/ccache:/usr/local/opt/ccache/libexec:$PATH"
+          export CMAKE_BUILD_TYPE=Release
+          export ONNXRUNTIME_SOURCE_DIR=onnxruntime
+          export CMAKE_OPTIONS="-Donnxruntime_USE_COREML=OFF -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -Donnxruntime_BUILD_UNIT_TESTS=OFF -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DONNX_CUSTOM_PROTOC_EXECUTABLE=$GITHUB_WORKSPACE/bin/protoc"
+          ./build-static_lib.sh
+
+      - name: Collect results
+        if: steps.cache-build-result.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          version=${{ env.ONNXRUNTIME_VERSION }}
+          artifact=onnxruntime-osx-${{ matrix.arch }}-static-$version
+
+          test -f output/static_lib/lib/libonnxruntime.a
+          mkdir "$artifact"
+          cp -av output/static_lib/* "$artifact"/
+          cp -v onnxruntime/README.md "$artifact"/README.md
+          cp -v onnxruntime/docs/Privacy.md "$artifact"/Privacy.md
+          cp -v onnxruntime/LICENSE "$artifact"/LICENSE
+          cp -v onnxruntime/ThirdPartyNotices.txt "$artifact"/ThirdPartyNotices.txt
+          cp -v onnxruntime/VERSION_NUMBER "$artifact"/VERSION_NUMBER
+          git -C onnxruntime rev-parse HEAD > "$artifact"/GIT_COMMIT_ID
+
+          find "$artifact/lib" -name '*.a' -print0 | while IFS= read -r -d '' archive; do
+            echo "Validating $archive"
+            member_count=$(ar t "$archive" | wc -l)
+            test "$member_count" -gt 0
+            while IFS= read -r member; do
+              kind=$(ar p "$archive" "$member" | file -)
+              if grep -q 'LLVM IR bitcode' <<<"$kind"; then
+                echo "LLVM bitcode member found in $archive: $member"
+                exit 1
+              fi
+              if ! grep -Eq 'Mach-O .* object' <<<"$kind"; then
+                echo "Unexpected non-Mach-O archive member in $archive: $member ($kind)"
+                exit 1
+              fi
+            done < <(ar t "$archive")
+          done
+
+          zip -r ${artifact}.zip "$artifact"
+
+      - name: Upload artifact
+        if: steps.cache-build-result.outputs.cache-hit != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: onnxruntime-osx-${{ matrix.arch }}-static-${{ env.ONNXRUNTIME_VERSION }}
+          path: onnxruntime-osx-${{ matrix.arch }}-static-${{ env.ONNXRUNTIME_VERSION }}
+
+      - name: Upload v${{ env.ONNXRUNTIME_VERSION }}
+        if: steps.cache-build-result.outputs.cache-hit != 'true'
+        uses: svenstaro/upload-release-action@v2
+        with:
+          file_glob: true
+          file: "./*.zip"
+          overwrite: true
+          tag: v${{ env.ONNXRUNTIME_VERSION }}
