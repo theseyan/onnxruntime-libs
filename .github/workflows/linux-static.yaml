@@ -206,6 +206,7 @@ jobs:
 
             cd /shared
             export CMAKE_BUILD_TYPE=${{ matrix.config }}
+            export ONNXRUNTIME_VERSION=${{ env.ONNXRUNTIME_VERSION }}
             export ONNXRUNTIME_SOURCE_DIR=onnxruntime
             export CMAKE_OPTIONS="-Donnxruntime_BUILD_UNIT_TESTS=OFF -Donnxruntime_USE_KLEIDIAI=OFF -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DONNX_CUSTOM_PROTOC_EXECUTABLE=/shared/bin/protoc -DCMAKE_C_COMPILER=/tmp/zig-cc -DCMAKE_CXX_COMPILER=/tmp/zig-c++ -DCMAKE_AR=/tmp/zig-ar -DCMAKE_RANLIB=/tmp/zig-ranlib -DCMAKE_C_COMPILER_AR=/tmp/zig-ar -DCMAKE_CXX_COMPILER_AR=/tmp/zig-ar -DCMAKE_C_COMPILER_RANLIB=/tmp/zig-ranlib -DCMAKE_CXX_COMPILER_RANLIB=/tmp/zig-ranlib -DCMAKE_DISABLE_FIND_PACKAGE_ZLIB=ON"
             ./build-static_lib.sh

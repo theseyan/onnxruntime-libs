@@ -92,6 +92,7 @@ jobs:
           export CMAKE_CXX_COMPILER_LAUNCHER=ccache
           export PATH="/usr/lib/ccache:/usr/local/opt/ccache/libexec:$PATH"
           export CMAKE_BUILD_TYPE=Release
+          export ONNXRUNTIME_VERSION=${{ env.ONNXRUNTIME_VERSION }}
           export ONNXRUNTIME_SOURCE_DIR=onnxruntime
           export CMAKE_OPTIONS="-Donnxruntime_USE_COREML=OFF -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -Donnxruntime_BUILD_UNIT_TESTS=OFF -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DONNX_CUSTOM_PROTOC_EXECUTABLE=$GITHUB_WORKSPACE/bin/protoc"
           ./build-static_lib.sh
